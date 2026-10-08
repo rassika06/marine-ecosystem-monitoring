@@ -30,6 +30,10 @@ set "MODEL_MODE=yoloworld"
 set "LLM_MODE=none"
 set "CONFIDENCE_THRESHOLD=0.25"
 echo.
+echo Preparing YOLO-World weights and text prompts (first run may take a while)...
+python -c "from ultralytics import YOLOWorld; m=YOLOWorld('yolov8s-worldv2.pt'); m.set_classes(['fish','coral','sea turtle','plastic bottle','plastic bag','fishing net','metal can','crab']); print('Pretrained detector prepared successfully')"
+if errorlevel 1 goto failed
+echo.
 echo =========================================================
 echo Starting actual pretrained detection API at port 8000.
 echo The first camera frame may download model weights.
