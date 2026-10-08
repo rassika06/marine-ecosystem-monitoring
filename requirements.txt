@@ -1,0 +1,9 @@
+fastapi>=0.110,<1
+uvicorn[standard]>=0.29,<1
+pillow>=10.2,<12
+numpy>=1.26,<3
+python-multipart>=0.0.9,<1
+# Optional experimental zero-shot detection (large CPU download):
+# pip install torch transformers
+# Optional custom marine YOLO detection with trained weights:
+# pip install ultralytics
