@@ -1,0 +1,18 @@
+services:
+  web:
+    image: python:3.11-alpine
+    working_dir: /app
+    volumes:
+      - .:/app:ro
+    command: python -m http.server 5500 --bind 0.0.0.0
+    ports:
+      - "5500:5500"
+  api:
+    build: .
+    environment:
+      MODEL_MODE: ${MODEL_MODE:-none}
+      YOLO_WEIGHTS: ${YOLO_WEIGHTS:-models/marine_best.pt}
+      LLM_MODE: ${LLM_MODE:-none}
+      OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434}
+    ports:
+      - "8000:8000"
