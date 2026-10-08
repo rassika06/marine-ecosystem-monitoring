@@ -30,12 +30,14 @@ Visit **http://localhost:5500**. Using localhost (rather than a file:// page) al
 2. In a **second** Command Prompt window, double-click:
    - **RUN_API.bat** for real image preprocessing and webcam **quality measurements** (no detection weights), or
    - **RUN_REAL_AI.bat** for *experimental real object detection*. This installs Ultralytics and loads **YOLO-World**. On the first use, pretrained weights and a CLIP text encoder must be downloaded. Git and internet access are required. Installation/downloads can take several minutes. Keep this window open.
-3. In the dashboard, click **Live camera → Start camera**. Grant camera access in your browser.
-4. Click **Start live analysis**. Frames are sampled periodically and analyzed sequentially; if model inference is slow, updates will also be slow. The last processed frame is displayed with its actual predictions.
+3. In the dashboard, click **Live camera** and choose an input:
+   - **Start camera** — use your laptop/USB camera; allow browser access.
+   - **Choose underwater video** — select a local MP4/WebM file. This is especially useful for a presentation without an underwater webcam. The selected video plays locally and the same live analysis pipeline samples its real frames.
+4. Click **Start live analysis**. Frames are sampled periodically and analyzed sequentially; if model inference is slow, updates will also be slow. The last processed frame is displayed with its actual predictions. A recorded video is visibly labeled **RECORDED VIDEO** (not presented as a live feed).
 5. The panel shows **Frames analyzed**, **Inference time**, **Brightness**, **Contrast**, and model-predicted categories when available.
 6. Click **Stop analysis** to stop processing, or **Stop camera** to release the camera. You can still choose **Capture & analyze** to send a single frame to Analysis Studio.
 
-**Important limitations:** The webcam sees what your camera actually sees. If you point a laptop webcam into an ordinary room, there may be no fish or coral to find. To test the detector with marine objects, upload a real underwater image in **Analysis Studio**, or use a connected underwater video camera. The demo reef/debris/fish-health drawings remain **scripted** and are clearly labeled. With no detector or on model failure, continuous monitoring shows **measured image quality only** and will **not fabricate bounding boxes**.
+**Important limitations:** The webcam sees what your camera actually sees. If you point a laptop webcam into an ordinary room, there may be no fish or coral to find. To test the detector with marine objects, upload a real underwater image in **Analysis Studio**, select a local underwater MP4/WebM clip, or use a connected underwater video camera. The demo reef/debris/fish-health drawings remain **scripted** and are clearly labeled. With no detector or on model failure, continuous monitoring shows **measured image quality only** and will **not fabricate bounding boxes**.
 
 **This is sampled live detection, not guaranteed 30 FPS.** Speed depends on computer, image content, model startup, and CPU/GPU. A pretrained general-purpose detector is not a validated marine species or fish-disease classifier.
 
@@ -93,7 +95,7 @@ API documentation: http://localhost:8000/docs
 - Three **clearly scripted** illustrated example scenarios with overlays
 - Optional OWLv2, YOLO-World or compatible custom YOLO detection weights
 - Contextual text explanation, cautious scientific labeling
-- Live camera capture **and continuous sequential frame sampling** from a webcam or supported underwater USB camera
+- Live camera capture, local MP4/WebM playback, **and sequential frame sampling** from a webcam or recorded video
 - Real-time frame quality metrics and (when a model is active) experimental object bounding boxes
 - Browser-local history (up to 12 items)
 - JPG annotated image, JSON and TXT report export
