@@ -22,7 +22,7 @@ python -m http.server 5500
 
 Visit **http://localhost:5500**. Using localhost (rather than a file:// page) also enables browser camera support.
 
-## Run the optional Python API
+## Run both services with Docker Desktop\n\nFrom the repository folder, run:\n\n```bash\ndocker compose up --build\n```\n\nOpen **http://localhost:5500** for the dashboard and **http://localhost:8000/docs** for the API. The default container configuration is quality-only (no pretend ML results).\n\n## Run the optional Python API
 
 Use Python 3.10+.
 
