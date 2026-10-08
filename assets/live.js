@@ -7,6 +7,8 @@
   const liveStart = $("startLive");
   const liveStop = $("stopLive");
   const video = $("cameraVideo");
+  const recordedFile = $("videoFile");
+  const loadVideo = $("loadVideo");
   const modeTag = $("liveMode");
   const frameCount = $("liveFrames");
   const latency = $("liveLatency");
@@ -24,6 +26,7 @@
   let processed = 0;
   let last = null;
   let hasApiError = false;
+  let recordedURL = null;
 
   function mode(message) {
     modeTag.textContent = message;
@@ -31,7 +34,7 @@
 
   function setRunning(running) {
     active = running;
-    liveStart.disabled = running || !state.camera;
+    liveStart.disabled = running || !(state.camera || recordedURL);
     liveStop.disabled = !running;
     liveStart.textContent = running ? "Analyzing live frames…" : "◉ Start live analysis";
   }
@@ -44,10 +47,20 @@
   }
 
   function cameraAvailable() {
-    return !!(state.camera &&
-      state.camera.getVideoTracks().some(t => t.readyState === "live") &&
-      video.videoWidth > 0 && video.videoHeight > 0);
+    const runningCamera = state.camera && state.camera.getVideoTracks().some(t => t.readyState === "live");
+    const playingFile = recordedURL && !video.paused && !video.ended;
+    return !!((runningCamera || playingFile) && video.videoWidth > 0 && video.videoHeight > 0);
   }
+
+  function releaseRecordedVideo(){
+    if(!recordedURL)return;
+    video.pause();
+    video.removeAttribute("src");
+    video.load();
+    URL.revokeObjectURL(recordedURL);
+    recordedURL=null;
+  }
+
 
   function captureFrame() {
     const w = video.videoWidth;
@@ -126,7 +139,9 @@
         ctx.fillText(text,Math.max(0,px)+6,labelY+14);
       }
     }
-    const statusLabel = data.status === "model_inference" ? "UNVALIDATED MODEL BOXES" : "IMAGE-QUALITY MEASUREMENT · NO AI DETECTION";
+    const kind = recordedURL ? "RECORDED VIDEO" : "LIVE CAMERA";
+    const statusLabel = kind + (data.status === "model_inference" ?
+      " · UNVALIDATED MODEL BOXES" : " · QUALITY ONLY / NO DETECTOR");
     ctx.font = "bold 11px sans-serif";
     const labelWidth = Math.min(width-18,ctx.measureText(statusLabel).width+20);
     ctx.fillStyle = "#05243fe6";
@@ -144,10 +159,10 @@
     contrast.textContent = data.quality ? String(data.quality.contrast) : "—";
     observations.replaceChildren();
     if(data.status !== "model_inference"){
-      mode("LIVE · QUALITY ONLY");
+      mode(recordedURL ? "VIDEO · QUALITY ONLY" : "LIVE · QUALITY ONLY");
       observations.textContent = "No detection model is operating. Fish, coral, debris and disease counts are unavailable.";
     } else {
-      mode("LIVE · EXPERIMENTAL AI");
+      mode(recordedURL ? "VIDEO · EXPERIMENTAL AI" : "LIVE · EXPERIMENTAL AI");
       if(!data.detections?.length){
         observations.textContent = "No candidate objects above the model confidence threshold in this frame.";
       }else{
@@ -248,13 +263,13 @@
     if(requestController){requestController.abort();requestController=null}
     setRunning(false);
     clearOverlay();
-    mode(state.camera?"CAMERA ACTIVE · ANALYSIS PAUSED":"WAITING FOR CAMERA");
+    mode(recordedURL ? "VIDEO ACTIVE · ANALYSIS PAUSED" : (state.camera ? "CAMERA ACTIVE · ANALYSIS PAUSED" : "WAITING FOR CAMERA"));
     if(!silent)toast("Live analysis stopped. Camera feed remains available.");
   }
 
   liveStart.addEventListener("click",async()=>{
     if(active)return;
-    if(!cameraAvailable()){toast("Start the camera first and allow browser access.");return}
+    if(!cameraAvailable()){toast("Start the camera or play a supported video file first.");return}
     setRunning(true);
     processed=0;
     hasApiError=false;
@@ -276,7 +291,56 @@
     runFrame(cycle);
   });
   liveStop.addEventListener("click",()=>stopAnalysis());
-  $("stopCamera").addEventListener("click",()=>{stopAnalysis({silent:true});liveStart.disabled=true;mode("WAITING FOR CAMERA")});
+  loadVideo.addEventListener("click",()=>recordedFile.click());
+  recordedFile.addEventListener("change",async e=>{
+    const file=e.target.files && e.target.files[0];
+    if(!file)return;
+    if(!file.type.startsWith("video/")){
+      toast("Choose an MP4 or WebM video file.");return;
+    }
+    stopAnalysis({silent:true});
+    if(state.camera){
+      state.camera.getTracks().forEach(track=>track.stop());
+      state.camera=null;
+      video.srcObject=null;
+    }
+    releaseRecordedVideo();
+    recordedURL=URL.createObjectURL(file);
+    video.src=recordedURL;video.loop=true;video.muted=true;
+    video.classList.add("active");
+    $("cameraPlaceholder").classList.add("hidden");
+    document.querySelector(".camera-overlay").classList.add("active");
+    document.querySelector(".camera-overlay").childNodes[0].textContent="▶ RECORDED VIDEO ";
+    $("cameraState").textContent="LOCAL VIDEO FILE";
+    $("startCamera").disabled=false;
+    $("stopCamera").disabled=false;
+    $("captureCamera").disabled=false;
+    liveStart.disabled=false;
+    recordedFile.value="";
+    try{
+      await video.play();
+      mode("RECORDED VIDEO · READY");
+      toast("Video is playing locally. Click Start live analysis to process its frames.");
+    }catch(err){
+      mode("VIDEO CANNOT PLAY");
+      toast("Cannot play video format in this browser: "+err.message);
+      releaseRecordedVideo();
+      liveStart.disabled=true;
+    }
+  });
+  $("startCamera").addEventListener("click",()=>{
+    if(recordedURL){
+      stopAnalysis({silent:true});
+      releaseRecordedVideo();
+      document.querySelector(".camera-overlay").childNodes[0].textContent="● LIVE INPUT ";
+    }
+  });
+  $("stopCamera").addEventListener("click",()=>{
+    stopAnalysis({silent:true});
+    releaseRecordedVideo();
+    document.querySelector(".camera-overlay").childNodes[0].textContent="● LIVE INPUT ";
+    liveStart.disabled=true;mode("WAITING FOR CAMERA");
+  });
   $("captureCamera").addEventListener("click",()=>stopAnalysis({silent:true}));
   for(const button of document.querySelectorAll("[data-nav]")){
     button.addEventListener("click",()=>{
@@ -285,10 +349,10 @@
   }
   // The original camera handler toggles the button's disabled attribute on permission success.
   const observer=new MutationObserver(()=>{
-    if(!active)liveStart.disabled=!state.camera;
+    if(!active)liveStart.disabled=!(state.camera || recordedURL);
     if(state.camera&&!active&&modeTag.textContent==="WAITING FOR CAMERA")mode("READY TO ANALYZE");
   });
   observer.observe($("startCamera"),{attributes:true,attributeFilter:["disabled"]});
   window.addEventListener("resize",()=>{if(active && last)paint(last.frame,last.detections,last.data)});
-  window.addEventListener("beforeunload",()=>stopAnalysis({silent:true}));
+  window.addEventListener("beforeunload",()=>{stopAnalysis({silent:true});releaseRecordedVideo()});
 })();
