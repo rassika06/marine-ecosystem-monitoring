@@ -19,6 +19,6 @@ jobs:
       - name: Check Python syntax
         run: python -m compileall -q backend
       - name: Check frontend JavaScript syntax
-        run: node --check assets/app.js
+        run: node --check assets/app.js && node --check assets/classic.js
       - name: Run API tests
         run: python -m pytest -q tests
