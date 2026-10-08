@@ -13,6 +13,8 @@ import base64
 import io
 import os
 import threading
+import json
+from urllib import request as urllib_request
 from collections import Counter
 from functools import lru_cache
 from pathlib import Path
@@ -170,6 +172,47 @@ def interpret(detections: list[dict[str, Any]], quality: dict[str, Any], mode: s
     return intro + caveat
 
 
+def grounded_explanation(detections: list[dict[str, Any]], quality: dict[str, Any],
+                         mode: str) -> tuple[str, str]:
+    """Optional LOCAL Ollama LLM; only uses verified detection labels as evidence.
+
+    Never sends images; failure degrades to a transparent rule-based summary.
+    """
+    baseline = interpret(detections, quality, mode)
+    if os.getenv("LLM_MODE", "none").lower() != "ollama" or mode != "model_inference":
+        return baseline, "rule-based"
+    labels = [{"label": str(d.get("label", ""))[:80],
+               "confidence": float(d.get("confidence", 0))}
+              for d in detections[:30]]
+    prompt = (
+        "You are a cautious assistant explaining experimental marine object detections. "
+        "Only interpret the provided JSON evidence. Do not invent locations, species, "
+        "fish diagnoses, measurements or extra sightings. Explain uncertainty in two to "
+        "four short sentences. Say the detections need expert validation.\n"
+        + json.dumps({"detections": labels, "image_quality": quality}, ensure_ascii=True)
+    )
+    try:
+        service = os.getenv("OLLAMA_URL", "http://127.0.0.1:11434").rstrip("/")
+        payload = json.dumps({
+            "model": os.getenv("OLLAMA_MODEL", "llama3.2:3b"),
+            "prompt": prompt,
+            "stream": False,
+            "options": {"temperature": 0.1},
+        }).encode("utf-8")
+        req = urllib_request.Request(
+            service + "/api/generate", data=payload,
+            headers={"Content-Type": "application/json"}, method="POST",
+        )
+        with urllib_request.urlopen(req, timeout=15) as response:
+            text = json.load(response).get("response", "").strip()[:2500]
+        if not text:
+            raise ValueError("Empty LLM response")
+        return (text + " Unverified research-model output; expert review required.",
+                "local-ollama")
+    except Exception:
+        return baseline, "rule-based (Ollama unavailable)"
+
+
 @app.get("/api/health")
 def health():
     available = MODE in ("owlv2", "yolo")
@@ -177,6 +220,7 @@ def health():
         "ok": True, "model_mode": MODE, "model_configured": available,
         "disease_model_validated": False, "species_model_validated": False,
         "label": "Experimental object detection" if available else "Quality-only mode",
+        "llm_mode": os.getenv("LLM_MODE", "none"),
     }
 
 
@@ -207,11 +251,12 @@ async def analyze(file: UploadFile = File(...)):
             503, f"Model initialization/inference failed: {str(exc)[:250]}. "
                  "Set MODEL_MODE=none to use quality-only analysis."
         ) from exc
+    explanation, explanation_engine = grounded_explanation(detections, metrics, status)
     return {
         "status": status, "model_mode": MODE, "width": image.width, "height": image.height,
         "quality": metrics, "detections": detections,
         "counts": dict(Counter(d["category"] for d in detections)),
-        "explanation": interpret(detections, metrics, status),
+        "explanation": explanation, "explanation_engine": explanation_engine,
         "annotated_image": annotated_jpeg(processed, detections),
         "disclaimer": "Models are not validated for species/disease diagnosis; use for research demonstrations only.",
     }
@@ -220,11 +265,8 @@ async def analyze(file: UploadFile = File(...)):
 @app.post("/api/explain")
 def explain(payload: InterpretationRequest):
     # Grounded deterministic semantic interpretation, not represented as an LLM.
-    return {
-        "explanation": interpret(payload.detections, payload.quality, payload.mode),
-        "engine": "deterministic rule-based summary",
-        "llm_enabled": False,
-    }
+    explanation, engine = grounded_explanation(payload.detections, payload.quality, payload.mode)
+    return {"explanation": explanation, "engine": engine, "llm_enabled": engine == "local-ollama"}
 
 
 @app.get("/")
