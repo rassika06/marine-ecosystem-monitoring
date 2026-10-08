@@ -63,3 +63,36 @@ def test_rule_summary_transparency():
     assert "not available" in content
     assert "No fish species" in content
     assert "not" in content.lower()
+
+
+def test_realtime_frame_no_fabricated_predictions():
+    """Camera frames without a configured model must only report real image metrics."""
+    response = client.post(
+        "/api/analyze-frame",
+        files={"file": ("live.jpg", make_image(), "image/png")},
+    )
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["status"] == "quality_only"
+    assert data["detections"] == []
+    assert data["counts"] == {}
+    assert "annotated_image" not in data  # Low-bandwidth live endpoint
+    assert data["inference_ms"] >= 0
+    assert 0 <= data["quality"]["brightness"] <= 255
+    assert "No fish species" in data["explanation"]
+
+
+def test_realtime_frame_rejects_invalid_image():
+    response = client.post(
+        "/api/analyze-frame",
+        files={"file": ("broken.png", b"not an image", "image/png")},
+    )
+    assert response.status_code == 400
+
+
+def test_realtime_frame_rejects_large_file():
+    response = client.post(
+        "/api/analyze-frame",
+        files={"file": ("big.jpg", b"x" * (4 * 1024 * 1024 + 1), "image/jpeg")},
+    )
+    assert response.status_code == 413
