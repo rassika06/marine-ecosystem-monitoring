@@ -5,13 +5,17 @@ This is a carefully reconstructed **student-project interface**, following the f
 ## Open in Windows
 
 1. Extract this ZIP.
-2. Double-click **RUN_DEMO.bat**. Your browser opens at **http://localhost:5500**.
+2. Double-click **RUN_DEMO.bat**. The updated launcher **checks that the new UI and photos are present**, starts its own server on a free port, and opens the correct address automatically (example: **http://127.0.0.1:54321/?ui=screenshot-matched**). Do **not** manually type `localhost:5500` because an old MarineScope server may be running there.
 3. Explore the five dashboard cards, output stream, debris audit popup, and Live AI Camera Scanner.
 4. To measure a real uploaded image (brightness/contrast), double-click **RUN_API.bat** in a **second** window, then reload the browser.
 5. To attempt **experimental actual object detection**, close RUN_API.bat and run **RUN_REAL_AI.bat** instead. First-time model downloads and installation can take several minutes; internet access and sufficient disk space are needed. Do not run both API scripts simultaneously (both use port 8000).
 6. Choose **Upload Image** on a card. Actual model predictions, if available, appear with bounding boxes and cautious explanations.
 7. Open **Live Camera** → **Start Camera**, or **Use Video File** for an underwater MP4/WebM recording. **Capture & Diagnose Now** analyzes the current frame; **Auto Scan** repeats captures sequentially.
 8. Result popups include downloadable annotated pictures, a real one-page PDF report and JSON.
+
+### If the old MarineScope UI still appears
+
+You have either opened an old tab, an old ZIP, or an old `localhost:5500` server. **Download a fresh ZIP** from GitHub, extract it into a separate directory, and make sure `launch_demo.py`, `assets/classic.css`, and `assets/reference/hero.jpg` are present. Double-click that extracted folder's **RUN_DEMO.bat** and use ONLY the new tab it opens. The black window must say `Verified new classic.css / classic.js and ocean photo assets.` and show the random port it selected. If this verification fails, it stops and prints the missing file rather than showing the old interface.
 
 ## IMPORTANT: What is real and what is illustrative
 
@@ -30,6 +34,7 @@ This is a carefully reconstructed **student-project interface**, following the f
 - `assets/classic.js` — navigation, real uploads, PDF/image export, webcam/video capture, demo results
 - `assets/reference/*.jpg` — crops extracted from user screenshots (same photos, screenshot-only quality)
 - `backend/app.py` — FastAPI processing and optional pretrained YOLO-World
-- `RUN_DEMO.bat`, `RUN_API.bat`, `RUN_REAL_AI.bat` — Windows setup
+- `RUN_DEMO.bat` + `launch_demo.py` — Windows launcher with asset verification, cache bypass and an available local port
+- `RUN_API.bat`, `RUN_REAL_AI.bat` — Optional Python API setup
 
 Use for demonstrations and research prototyping only. Do not present example screenshots as validated experiments or clinical findings.
