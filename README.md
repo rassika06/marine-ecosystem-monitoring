@@ -52,7 +52,7 @@ API documentation: http://localhost:8000/docs
 
 **Custom YOLO**: `pip install ultralytics`, place **your own trained** weights in `models/marine_best.pt`, set `MODEL_MODE=yolo`. Neither the model nor training images are included. For best marine specificity, train the detector with properly labeled fish, coral, debris, and fish-health data and externally validate results.
 
-The backend's `/api/explain` uses **deterministic rule-based text**, not an LLM. A genuine LLM integration is a future extension; the project name describes the **proposed research framework**.
+**Optional local LLM**: Install [Ollama](https://ollama.com/), run `ollama pull llama3.2:3b`, and set `LLM_MODE=ollama` before starting the API. When a detection model is running, the backend can send only detected labels/confidence and descriptive quality metrics to the local Ollama server (not image pixels). By default, or when Ollama fails, summaries remain transparently **rule-based**. Model-generated explanations may be wrong and must be checked against detector output.
 
 ## Implemented features
 
@@ -98,7 +98,7 @@ marine-ecosystem-monitoring/
 | Mask R-CNN segmentation | **Not implemented** (requires segmentation model and weights) |
 | YOLOv11 detection | **Only if custom compatible marine-trained YOLO weights supplied** |
 | Fish species and fish disease identification | **Not validated or production ready** |
-| LLM semantic interpretation | **Not implemented**; grounded rule-based summary is used instead |
+| LLM semantic interpretation | Optional **local Ollama** model; rule-based fallback by default |
 | Results dashboard and downloadable reports | Implemented |
 | Real-time video analysis | Camera frame capture implemented; **continuous frame-by-frame detection not implemented** |
 
