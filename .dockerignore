@@ -1,0 +1,12 @@
+.git
+.venv
+venv
+node_modules
+__pycache__
+.pytest_cache
+models
+*.pt
+*.pth
+*.onnx
+*.zip
+.env
