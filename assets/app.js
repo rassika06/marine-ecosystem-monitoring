@@ -193,14 +193,17 @@ $("analyzeButton").addEventListener("click",async()=>{
   state.busy=true;$("analyzeButton").disabled=true;$("analyzeButton").textContent="Analyzing image…";
   try{
     if(state.kind==="demo"){await new Promise(r=>setTimeout(r,250));await renderResult(demoResult())}
-    else if(state.apiOnline && state.sourceBlob){
-      try{
-        const form=new FormData();form.append("file",state.sourceBlob,state.sourceName);
-        const response=await fetch(state.apiUrl+"/api/analyze",{method:"POST",body:form});
-        if(!response.ok){let msg="Server "+response.status;try{const err=await response.json();msg=err.detail||msg}catch{}throw Error(msg)}
-        await renderResult(await response.json());
-      }catch(err){await renderResult(qualityOnlyResult("The API request failed: "+err.message))}
-    }else await renderResult(qualityOnlyResult("Optional Python API is not running."));
+    else if(state.sourceBlob){
+      if(!state.apiOnline)await checkAPI();
+      if(state.apiOnline){
+        try{
+          const form=new FormData();form.append("file",state.sourceBlob,state.sourceName);
+          const response=await fetch(state.apiUrl+"/api/analyze",{method:"POST",body:form});
+          if(!response.ok){let msg="Server "+response.status;try{const err=await response.json();msg=err.detail||msg}catch{}throw Error(msg)}
+          await renderResult(await response.json());
+        }catch(err){await renderResult(qualityOnlyResult("The API request failed: "+err.message))}
+      }else await renderResult(qualityOnlyResult("Optional Python API is not running."));
+    }
   }catch(err){toast("Unable to analyze image: "+err.message)}
   finally{state.busy=false;$("analyzeButton").disabled=!state.kind;$("analyzeButton").innerHTML='◈ Run analysis <span>→</span>'}
 });
