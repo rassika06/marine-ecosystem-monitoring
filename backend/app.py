@@ -4,6 +4,7 @@ HONEST MODES:
 - MODEL_MODE=none (default): real image quality checks, no AI detection.
 - MODEL_MODE=owlv2: pretrained zero-shot box detection (experimental; CPU-heavy).
 - MODEL_MODE=yolo: user-supplied, marine-trained YOLO weights (recommended for accuracy).
+- MODEL_MODE=yoloworld: pretrained open-vocabulary YOLO-World (experimental, first-download needed).
 
 Fish disease and fine-grained species labels require task-specific validated weights.
 """
@@ -19,6 +20,7 @@ from collections import Counter
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
+from time import perf_counter
 
 import numpy as np
 from fastapi import FastAPI, File, HTTPException, UploadFile
@@ -34,6 +36,10 @@ CONFIDENCE = float(os.getenv("CONFIDENCE_THRESHOLD", "0.22"))
 OWL_LABELS = [
     "fish", "coral", "sea turtle", "plastic bottle", "plastic bag",
     "fishing net", "metal can", "trash", "crab", "jellyfish",
+]
+WORLD_LABELS = [
+    "fish", "coral", "sea turtle", "plastic bottle",
+    "plastic bag", "fishing net", "metal can", "crab",
 ]
 COLORS = {
     "fish": "#37c9fa", "coral": "#ff6b9d", "debris": "#f5b95e",
@@ -104,6 +110,11 @@ def load_model():
         if not Path(WEIGHTS).is_file():
             raise FileNotFoundError(f"Marine-trained weights missing: {WEIGHTS}")
         return YOLO(WEIGHTS)
+    if MODE == "yoloworld":
+        from ultralytics import YOLOWorld
+        detector = YOLOWorld("yolov8s-worldv2.pt")
+        detector.set_classes(WORLD_LABELS)
+        return detector
     return None
 
 
@@ -123,8 +134,8 @@ def infer(image: Image.Image) -> tuple[list[dict[str, Any]], str]:
                     "confidence": round(float(result["score"]), 3),
                     "box": [round(float(box[k])) for k in ("xmin", "ymin", "xmax", "ymax")],
                 })
-        elif MODE == "yolo":
-            for result in model.predict(source=image, conf=CONFIDENCE, verbose=False):
+        elif MODE in ("yolo", "yoloworld"):
+            for result in model.predict(source=image, conf=CONFIDENCE, imgsz=640, verbose=False):
                 for b in result.boxes:
                     class_id = int(b.cls.item())
                     label = str(result.names[class_id])
@@ -215,12 +226,13 @@ def grounded_explanation(detections: list[dict[str, Any]], quality: dict[str, An
 
 @app.get("/api/health")
 def health():
-    available = MODE in ("owlv2", "yolo")
+    available = MODE in ("owlv2", "yolo", "yoloworld")
     return {
         "ok": True, "model_mode": MODE, "model_configured": available,
         "disease_model_validated": False, "species_model_validated": False,
         "label": "Experimental object detection" if available else "Quality-only mode",
         "llm_mode": os.getenv("LLM_MODE", "none"),
+        "frame_analysis_supported": True,
     }
 
 
@@ -259,6 +271,55 @@ async def analyze(file: UploadFile = File(...)):
         "explanation": explanation, "explanation_engine": explanation_engine,
         "annotated_image": annotated_jpeg(processed, detections),
         "disclaimer": "Models are not validated for species/disease diagnosis; use for research demonstrations only.",
+    }
+
+
+@app.post("/api/analyze-frame")
+async def analyze_frame(file: UploadFile = File(...)):
+    """Low-overhead endpoint for continuously sampled webcam frames.
+
+    The client draws boxes on its own canvas. This endpoint never returns a
+    large image payload, and never invents detections when no ML model is active.
+    """
+    data = await file.read(4 * 1024 * 1024 + 1)
+    if len(data) > 4 * 1024 * 1024:
+        raise HTTPException(413, "Frame exceeds 4 MB.")
+    try:
+        image = Image.open(io.BytesIO(data))
+        image.verify()
+        image = Image.open(io.BytesIO(data))
+        if image.width * image.height > MAX_PIXELS:
+            raise HTTPException(413, "Frame dimensions too large.")
+        image = ImageOps.exif_transpose(image).convert("RGB")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(400, "Invalid camera frame.") from exc
+
+    image.thumbnail((640, 640))
+    quality = quality_metrics(image)
+    processed = enhance(image)
+    started = perf_counter()
+    try:
+        detections, mode = infer(processed)
+    except Exception as exc:
+        raise HTTPException(
+            503, f"Detection model unavailable: {str(exc)[:180]}. "
+                 "Switch to MODEL_MODE=none for quality-only monitoring."
+        ) from exc
+    elapsed_ms = int((perf_counter() - started) * 1000)
+    return {
+        "status": mode, "model_mode": MODE,
+        "width": image.width, "height": image.height,
+        "detections": detections,
+        "counts": dict(Counter(d["category"] for d in detections)),
+        "quality": quality, "inference_ms": elapsed_ms,
+        "explanation": interpret(detections, quality, mode),
+        "explanation_engine": "rule-based (live frames)",
+        "disclaimer": (
+            "Unvalidated experimental detection. Bounding boxes are not "
+            "instance segmentation; fish health is not a diagnosis."
+        ),
     }
 
 
