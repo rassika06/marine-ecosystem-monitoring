@@ -27,6 +27,7 @@ from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageOps
 from pydantic import BaseModel
+from starlette.concurrency import run_in_threadpool
 
 MAX_BYTES = 12 * 1024 * 1024
 MAX_PIXELS = 20_000_000
@@ -121,6 +122,8 @@ def load_model():
 def infer(image: Image.Image) -> tuple[list[dict[str, Any]], str]:
     if MODE == "none":
         return [], "quality_only"
+    if MODE not in ("owlv2", "yolo", "yoloworld"):
+        raise ValueError("Unknown MODEL_MODE. Choose none, owlv2, yolo or yoloworld.")
     with _inference_lock:
         model = load_model()
         detections = []
@@ -257,13 +260,13 @@ async def analyze(file: UploadFile = File(...)):
     processed = enhance(image)
     metrics = quality_metrics(image)
     try:
-        detections, status = infer(processed)
+        detections, status = await run_in_threadpool(infer, processed)
     except Exception as exc:
         raise HTTPException(
             503, f"Model initialization/inference failed: {str(exc)[:250]}. "
                  "Set MODEL_MODE=none to use quality-only analysis."
         ) from exc
-    explanation, explanation_engine = grounded_explanation(detections, metrics, status)
+    explanation, explanation_engine = await run_in_threadpool(grounded_explanation, detections, metrics, status)
     return {
         "status": status, "model_mode": MODE, "width": image.width, "height": image.height,
         "quality": metrics, "detections": detections,
@@ -301,7 +304,7 @@ async def analyze_frame(file: UploadFile = File(...)):
     processed = enhance(image)
     started = perf_counter()
     try:
-        detections, mode = infer(processed)
+        detections, mode = await run_in_threadpool(infer, processed)
     except Exception as exc:
         raise HTTPException(
             503, f"Detection model unavailable: {str(exc)[:180]}. "
